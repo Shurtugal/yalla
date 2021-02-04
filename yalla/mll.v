@@ -96,7 +96,8 @@ Inductive ll : list formula -> Type :=
 | ax_r : forall X, ll (covar X :: var X :: nil)
 | ex_r : forall l1 l2, ll l1 -> Permutation_Type l1 l2 -> ll l2
 | tens_r : forall A B l1 l2, ll (A :: l1) -> ll (B :: l2) -> ll (tens A B :: l2 ++ l1)
-| parr_r : forall A B l, ll (A :: B :: l) -> ll (parr A B :: l).
+| parr_r : forall A B l, ll (A :: B :: l) -> ll (parr A B :: l)
+| cut_r : forall A l1 l2 l3 l4, ll (l1 ++ A :: l2) -> ll (l3 ++ dual A :: l4) -> ll (l3 ++ l2 ++ l1 ++ l4).
 Notation "⊢ l" := (ll l) (at level 70).
 
 (** ** Size of proofs *)
@@ -106,6 +107,7 @@ match pi with
 | ex_r pi0 _ => S (psize pi0)
 | tens_r pi1 pi2 => S (psize pi1 + psize pi2)
 | parr_r pi0 => S (psize pi0)
+| cut_r _ _ _ _ _ pi1 pi2 => S (psize pi1 + psize pi2)
 end.
 
 Lemma psize_pos l (pi : ll l) : 0 < psize pi.
@@ -114,6 +116,22 @@ Proof. destruct pi; cbn; lia. Qed.
 Lemma psize_rew l l' (pi : ll l) (Heq : l = l') : psize (rew Heq in pi) = psize pi.
 Proof. now subst. Qed.
 
+
+Inductive red (l : list formula) : ll l -> ll l -> Prop :=
+| ax_v : forall A l1 l2 (pi : ll (l1 ++ var A::l2)), ll (l1 ++ var A::l2) -> red (cut_r _ l1 l2 nil _ pi (ax_r A)) (ex_r pi _)
+| ax_cv : forall A l1 l2 (pi : ll (l1 ++ covar A::l2)), ll (l1 ++ covar A::l2) -> red (cut_r _ l1 l2 (covar A :: nil) nil pi (ax_r A)) (ex_r pi _)
+| parr_g : forall A B C l1 l2 l3 l4 (pi1 : ll (A::B::(l1 ++ C::l2))) (pi2 : ll (l3 ++ dual C :: l4)), 
+    ll (A::B::(l1 ++ C::l2)) -> ll (l3 ++ dual C :: l4) -> red (cut_r _ (parr A B :: l1) _ _ _ (parr_r pi1) pi2) (parr_r (cut_r _ (A::B::l1) _ _ _ pi1 pi2))
+| tens_g : forall A B C l1 l2 l3 l4 (pi1 : ll (A::(l1 ++ C::l2))) (pi2 : ll (B::(l1 ++ C::l2))) (pi3 : ll (l3 ++ dual C :: l4)),
+    ll (A::(l1 ++ C::l2)) -> ll (B::(l1 ++ C::l2)) -> ll (l3 ++ dual C :: l4) ->
+    red (cut_r C (tens A B :: l1) (l2 ++ l1 ++ C::l2) _ _ (tens_r pi1 pi2) pi3) (tens_r (cut_r _ _ _ _ _ pi1 pi3) (cut_r _ _ _ _ _ pi2 pi3))
+| tens_parr : forall A B l1 l2 l3 (pi1 : ll (A::l1)) (pi2 : ll (B::l2)) (pi3 : ll (dual B:: dual A::l3)),
+    ll (A::l1) -> ll (B::l2) -> ll (dual A :: dual B :: l3) -> red (cut_r _ nil _ nil _ (tens_r pi1 pi2) (parr_r pi3)) (cut_r _ nil _ _ _ pi1 (cut_r _ nil _ nil _ pi2 pi3))
+.
+
+
+
+(*
 
 (** * Cut Elimination *)
 
@@ -321,5 +339,7 @@ apply (sym_induction_ll (fun A B l1 l2 l3 l4 pi1 pi2 => B = dual A -> ll (l3 ++ 
   rewrite <- app_assoc; apply IHC; auto.
   now rewrite <- app_nil_l; apply IHD.
 Qed.
+
+*)
 
 End Atoms.
