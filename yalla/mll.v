@@ -117,40 +117,110 @@ Proof. destruct pi; cbn; lia. Qed.
 Lemma psize_rew l l' (pi : ll l) (Heq : l = l') : psize (rew Heq in pi) = psize pi.
 Proof. now subst. Qed.
 
-Check app_comm_cons.
+Lemma psize_rew_r l l' (pi : ll l) (Heq : l' = l) : psize (rew <- Heq in pi) = psize pi.
+Proof. now subst. Qed.
 
-Lemma app_comm_cons2
-     : forall (A : Type)
-         (x y : list A) 
-         (a : A),
-       a :: x ++ y =
-       (a :: x) ++ y.
+Lemma app_assoc_cons [T:Type] (a:T) (x y z : list T) : a :: x ++ y ++ z = a :: (x ++ y) ++ z.
 Proof.
-intros.
-cbn.
-reflexivity.
+  assert (x ++ y ++ z = (x ++ y) ++ z) as H.
+    apply app_assoc.
+  now rewrite H.
 Qed.
 
 Inductive red : forall l, ll l -> ll l -> Prop :=
-| parr_g : forall A B C l1 l2 l3 l4 (pi1 : ll (l1 ++ C::l2)) (pi2 : ll ((A::B::l3) ++ dual C :: l4)), 
-    red (cut_r _ _ _ (parr A B :: l3) _ pi1 (parr_r pi2))
-       (parr_r (cut_r _ _ _ _ _ pi1 pi2))
-.
-
-
-Inductive red (l : list formula) : ll l -> ll l -> Prop :=
-| ax_v : forall A l1 l2 (pi : ll (l1 ++ var A::l2)), ll (l1 ++ var A::l2) ->
-             red (cut_r _ l1 l2 nil _ pi (ax_r A)) (ex_r pi _)
-| ax_cv : forall A l1 l2 (pi : ll (l1 ++ covar A::l2)), ll (l1 ++ covar A::l2) ->
-             red (cut_r _ l1 l2 (covar A :: nil) nil pi (ax_r A)) (ex_r pi _)
-| parr_g : forall A B C l1 l2 l3 l4 (pi1 : ll (A::B::(l1 ++ C::l2))) (pi2 : ll (l3 ++ dual C :: l4)), 
-    ll (A::B::(l1 ++ C::l2)) -> ll (l3 ++ dual C :: l4) -> red (cut_r _ (parr A B :: l1) _ _ _ (parr_r pi1) pi2) (parr_r (cut_r _ (A::B::l1) _ _ _ pi1 pi2))
-| tens_g : forall A B C l1 l2 l3 l4 (pi1 : ll (A::(l1 ++ C::l2))) (pi2 : ll (B::(l1 ++ C::l2))) (pi3 : ll (l3 ++ dual C :: l4)),
-    ll (A::(l1 ++ C::l2)) -> ll (B::(l1 ++ C::l2)) -> ll (l3 ++ dual C :: l4) ->
-    red (cut_r C (tens A B :: l1) (l2 ++ l1 ++ C::l2) _ _ (tens_r pi1 pi2) pi3) (tens_r (cut_r _ _ _ _ _ pi1 pi3) (cut_r _ _ _ _ _ pi2 pi3))
+| ax_v : forall A l1 l2 (pi : ll (l1 ++ var A::nil ++ l2)),
+    red (cut_r _ l1 l2 nil _ pi (ax_r A))
+      (ex_r pi (Permutation_Type_sym (Permutation_Type_app_rot l2 l1 (var A::nil))))
+| ax_cv : forall A l1 l2 (pi : ll (l1 ++ covar A::nil ++ l2)),
+    red (cut_r _ l1 l2 (covar A :: nil) nil pi (ax_r A))
+      (rew <- (app_assoc _ _ _) in (rew <- (app_assoc _ _ _) in (rew (app_nil_end _) in
+        (ex_r pi (Permutation_Type_app_rot l1 (covar A::nil) l2)))))
+| parr_d : forall A B C l1 l2 l3 l4 (pi1 : ll (l1 ++ C::l2)) (pi2 : ll ((A::B::l3) ++ dual C :: l4)),
+    red (cut_r _ _ _ (parr A B :: l3) _ pi1 (parr_r pi2)) (parr_r (cut_r _ _ _ _ _ pi1 pi2))
 | tens_parr : forall A B l1 l2 l3 (pi1 : ll (A::l1)) (pi2 : ll (B::l2)) (pi3 : ll (dual B:: dual A::l3)),
-    red (cut_r _ nil _ nil _ (tens_r pi1 pi2) (parr_r pi3)) (cut_r _ nil _ _ _ pi1 (cut_r _ nil _ nil _ pi2 pi3))
+    red (rew <- (app_assoc _ _ _) in (cut_r _ nil _ nil _ (tens_r pi1 pi2) (parr_r pi3)))
+      (cut_r _ nil _ _ _ pi1 (cut_r _ nil _ nil _ pi2 pi3))
+| tens_d : forall A B C l1 l2 l3 l4 l5 (pi1 : ll (l1 ++ C :: l2)) (pi2 : ll (A::l3 ++ dual C::l4)) (pi3 : ll (B::l5)),
+    red (rew <- (app_assoc_cons _ _ _ _) in (rew <- (app_comm_cons _ _ _) in
+      (cut_r C _ _ (tens A B :: l5 ++ l3) l4 pi1 (rew (app_assoc_cons _ _ _ _) in (tens_r pi2 pi3)))))
+        (tens_r (cut_r C l1 l2 (A::l3) l4 pi1 pi2) pi3)
+
+| parr_rec : forall A B l (pi1 : ll (A :: B :: l)) (pi2 : ll (A :: B :: l)), red pi1 pi2 -> red (parr_r pi1) (parr_r pi2)
+| tens_rec_g : forall A B l1 l2 (pi1 : ll (A :: l1)) (pi2 : ll (A :: l1)) (pi3 : ll (B :: l2)), red pi1 pi2 -> red (tens_r pi1 pi3) (tens_r pi2 pi3)
+| tens_rec_d : forall A B l1 l2 (pi1 : ll (A :: l1)) (pi2 : ll (B :: l2)) (pi3 : ll (B :: l2)), red pi2 pi3 -> red (tens_r pi1 pi2) (tens_r pi1 pi3)
+| ex_rec : forall l1 l2 (P : Permutation_Type l1 l2) (pi1 : ll l1) (pi2 : ll l1), red pi1 pi2 -> red (ex_r pi1 P) (ex_r pi2 P)
 .
+
+(*
+Inductive red2 : forall l, ll l -> ll l -> Prop :=
+| ex_g : forall A l1 l2 l3 l4 P (pi1 : ll (l1 ++ A::l2)) (pi2 : ll (l3 ++ dual A :: l4)),
+    red2 (cut_r A _ _ _ _ (ex_r pi1 P) pi2) (ex_r (cut_r _ _ _ _ _ pi1 pi2) _).
+*)
+
+
+
+Lemma red_size : forall l (pi1 : ll l) (pi2 : ll l), red pi1 pi2 -> psize pi2 <= psize pi1.
+Proof.
+  intros l pi1 pi2 Hr.
+  induction Hr; simpl; try lia.
+  - rewrite 2 psize_rew_r, psize_rew. simpl. lia.
+  - rewrite <- plus_n_Sm. apply le_n.
+  - rewrite psize_rew_r. simpl. lia.
+  - rewrite 2 psize_rew_r. simpl. rewrite psize_rew. simpl. lia.
+Qed.
+
+Lemma red_size2 : forall l (pi1 : ll l) (pi2 : ll l), red pi1 pi2 -> psize pi2 < psize pi1.
+Proof.
+  intros l pi1 pi2 Hr.
+  induction Hr; simpl; try lia.
+  - rewrite 2 psize_rew_r, psize_rew. simpl. lia.
+  - rewrite <- plus_n_Sm. admit. (*parr_d*)
+  - rewrite psize_rew_r. simpl. lia.
+  - rewrite 2 psize_rew_r. simpl. rewrite psize_rew. simpl. rewrite <- plus_n_Sm, <- Plus.plus_assoc_reverse. admit. (*tens_d*)
+Abort.
+
+Fixpoint has_cut l (pi : ll l) :=
+match pi with
+| ax_r _ => false
+| ex_r pi0 _ => has_cut pi0
+| tens_r pi1 pi2 => (has_cut pi1) || (has_cut pi2)
+| parr_r pi0 => has_cut pi0
+| cut_r _ _ _ _ _ _ _ => true
+end.
+
+Lemma has_cut_rew l l' (pi : ll l) (Heq : l = l') : has_cut (rew Heq in pi) = has_cut pi.
+Proof. now subst. Qed.
+
+Lemma has_cut_rew_r l l' (pi : ll l) (Heq : l' = l) : has_cut (rew <- Heq in pi) = has_cut pi.
+Proof. now subst. Qed.
+
+
+Lemma red_term : forall l (pi1 : ll l), has_cut pi1 = true <-> exists (pi2 : ll l), red pi1 pi2.
+Proof.
+  intros l pi1. split.
+  - induction pi1 ; intro Hcut; simpl in Hcut.
+    + apply diff_false_true in Hcut. destruct Hcut.
+    + apply IHpi1 in Hcut. destruct Hcut as [pi2 Hp]. exists (ex_r pi2 p). apply ex_rec, Hp.
+    + apply orb_prop in Hcut. destruct Hcut as [Hc1 | Hc2].
+      * apply IHpi1_1 in Hc1. destruct Hc1 as [pi2 Hp]. exists (tens_r pi2 pi1_2). apply tens_rec_g, Hp.
+      * apply IHpi1_2 in Hc2. destruct Hc2 as [pi2 Hp]. exists (tens_r pi1_1 pi2). apply tens_rec_d, Hp.
+    + apply IHpi1 in Hcut. destruct Hcut as [pi2 Hp]. exists (parr_r pi2). apply parr_rec, Hp.
+    + admit.
+  - intros [pi2 Hp].
+    induction Hp; simpl; auto.
+    + apply has_cut_rew_r.
+    + rewrite 2 has_cut_rew_r. now simpl.
+    + apply orb_true_intro. now left.
+    + apply orb_true_intro. now right.
+Admitted.
+
+
+(* sous-preuve du admit ci-dessus *)
+Goal forall A l1 l2 l3 l4 (pi1_1 : ll (l1 ++ A :: l2)) (pi1_2 : ll (l3 ++ dual A :: l4)),
+  exists (pi2 : ll (l3 ++ l2 ++ l1 ++ l4)), red (cut_r A l1 l2 l3 l4 pi1_1 pi1_2) pi2.
+Proof.
+  intros A l1 l2 l3 l4 pi1_1 pi1_2.
+Abort.
 
 
 
