@@ -121,11 +121,29 @@ Lemma psize_rew_r l l' (pi : ll l) (Heq : l' = l) : psize (rew <- Heq in pi) = p
 Proof. now subst. Qed.
 
 Lemma app_assoc_cons [T:Type] (a:T) (x y z : list T) : a :: x ++ y ++ z = a :: (x ++ y) ++ z.
-Proof.
-  assert (x ++ y ++ z = (x ++ y) ++ z) as H.
-    apply app_assoc.
-  now rewrite H.
-Qed.
+Proof. now rewrite app_assoc. Qed.
+
+Lemma app_assoc_cons2 [T:Type] (a b:T) (x y z : list T) : a :: x ++ b :: y ++ z = a :: (x ++ b :: y) ++ z.
+Proof. now rewrite <- app_assoc, <- app_comm_cons. Qed.
+
+Lemma app_assoc_cons3 [T:Type] (a:T) (x y z t u : list T) : a :: x ++ y ++ z ++ t ++ u =  a :: (x ++ y ++ z ++ t) ++ u.
+Proof. now rewrite <- 3 app_assoc. Qed.
+
+Lemma app_assoc2 [T:Type] (x y z t: list T) : x ++ y ++ z ++ t = (x ++ y ++ z) ++ t.
+Proof. now rewrite <- 2 app_assoc. Qed.
+
+Lemma app_bidual a x y : x++a::y = x++(dual (dual a))::y.
+Proof. now rewrite bidual. Qed.
+
+
+
+Lemma psize_rew_fun (l : list formula) l' f (pi : ll (f l)) (Heq : l = l') : psize (rew [fun x => ll (f x)] Heq in pi) = psize pi.
+Proof. now subst. Qed.
+
+Lemma psize_rew_fun_r (l : list formula) l' f (pi : ll (f l)) (Heq : l' = l) : psize (rew <- [fun x => ll (f x)] Heq in pi) = psize pi.
+Proof. now subst. Qed.
+
+
 
 Inductive red : forall l, ll l -> ll l -> Prop :=
 | ax_v : forall A l1 l2 (pi : ll (l1 ++ var A::nil ++ l2)),
@@ -133,86 +151,122 @@ Inductive red : forall l, ll l -> ll l -> Prop :=
       (ex_r pi (Permutation_Type_sym (Permutation_Type_app_rot l2 l1 (var A::nil))))
 | ax_cv : forall A l1 l2 (pi : ll (l1 ++ covar A::nil ++ l2)),
     red (cut_r _ l1 l2 (covar A :: nil) nil pi (ax_r A))
-      (rew <- (app_assoc _ _ _) in (rew <- (app_assoc _ _ _) in (rew (app_nil_end _) in
-        (ex_r pi (Permutation_Type_app_rot l1 (covar A::nil) l2)))))
+      (rew <- (app_assoc2 _ _ _ _) in (rew (app_nil_end _) in (ex_r pi (Permutation_Type_app_rot l1 (covar A::nil) l2))))
 | parr_d : forall A B C l1 l2 l3 l4 (pi1 : ll (l1 ++ C::l2)) (pi2 : ll ((A::B::l3) ++ dual C :: l4)),
     red (cut_r _ _ _ (parr A B :: l3) _ pi1 (parr_r pi2)) (parr_r (cut_r _ _ _ _ _ pi1 pi2))
 | tens_parr : forall A B l1 l2 l3 (pi1 : ll (A::l1)) (pi2 : ll (B::l2)) (pi3 : ll (dual B:: dual A::l3)),
     red (rew <- (app_assoc _ _ _) in (cut_r _ nil _ nil _ (tens_r pi1 pi2) (parr_r pi3)))
       (cut_r _ nil _ _ _ pi1 (cut_r _ nil _ nil _ pi2 pi3))
-| tens_d : forall A B C l1 l2 l3 l4 l5 (pi1 : ll (l1 ++ C :: l2)) (pi2 : ll (A::l3 ++ dual C::l4)) (pi3 : ll (B::l5)),
+| tens_dg : forall A B C l1 l2 l3 l4 l5 (pi1 : ll (l1 ++ C :: l2)) (pi2 : ll (A::l3)) (pi3 : ll (B::l4 ++ dual C::l5)),
+    red (rew <- (app_comm_cons _ _ _) in (cut_r C _ _ (tens A B :: l4) (l5++l3) pi1 (rew <- (app_assoc_cons2 _ _ _ _ _) in (tens_r pi2 pi3))))
+      (rew <- (app_assoc_cons3 _ _ _ _ _ _) in (tens_r pi2 (cut_r C l1 l2 (B :: l4) l5 pi1 pi3) : ll (tens A B :: (l4 ++ l2 ++ l1 ++ l5) ++ l3)))
+| tens_dd : forall A B C l1 l2 l3 l4 l5 (pi1 : ll (l1 ++ C :: l2)) (pi2 : ll (A::l3 ++ dual C::l4)) (pi3 : ll (B::l5)),
     red (rew <- (app_assoc_cons _ _ _ _) in (rew <- (app_comm_cons _ _ _) in
       (cut_r C _ _ (tens A B :: l5 ++ l3) l4 pi1 (rew (app_assoc_cons _ _ _ _) in (tens_r pi2 pi3)))))
         (tens_r (cut_r C l1 l2 (A::l3) l4 pi1 pi2) pi3)
-
+| ex_d : forall A l1 l2 l3 l4 l5 l6 (pi1 : ll (l1 ++ A::l2)) (pi2 : ll (l3 ++ dual A :: l4)) (P : Permutation_Type (l3 ++ dual A::l4) (l5 ++ dual A :: l6)),
+    red (cut_r A _ _ _ _ pi1 (ex_r pi2 P))
+      (ex_r (cut_r _ _ _ _ _ pi1 pi2) (Permutation_Type_app_middle l2 _ _ _ _ (Permutation_Type_app_middle l1 _ _ _ _ (Permutation_Type_app_inv _ _ _ _ _ P))))
 | parr_rec : forall A B l (pi1 : ll (A :: B :: l)) (pi2 : ll (A :: B :: l)), red pi1 pi2 -> red (parr_r pi1) (parr_r pi2)
 | tens_rec_g : forall A B l1 l2 (pi1 : ll (A :: l1)) (pi2 : ll (A :: l1)) (pi3 : ll (B :: l2)), red pi1 pi2 -> red (tens_r pi1 pi3) (tens_r pi2 pi3)
 | tens_rec_d : forall A B l1 l2 (pi1 : ll (A :: l1)) (pi2 : ll (B :: l2)) (pi3 : ll (B :: l2)), red pi2 pi3 -> red (tens_r pi1 pi2) (tens_r pi1 pi3)
 | ex_rec : forall l1 l2 (P : Permutation_Type l1 l2) (pi1 : ll l1) (pi2 : ll l1), red pi1 pi2 -> red (ex_r pi1 P) (ex_r pi2 P)
-.
-
+| cut_sym : forall A l1 l2 l3 l4 (pi1 : ll (l1++A::l2)) (pi2 : ll (l3++dual A::l4)) (pi3 : ll (l1++l4++l3++l2)),
+    red (cut_r _ _ _ _ _ pi1 pi2) (rew <- (app_assoc _ _ _) in
+      (ex_r pi3 (Permutation_Type_trans (Permutation_Type_app_rot _ _ _) (Permutation_Type_app_rot _ _ _))))
+    -> red (cut_r _ _ _ l1 l2 pi2 (rew (app_bidual _ _ _) in pi1)) pi3
 (*
-Inductive red2 : forall l, ll l -> ll l -> Prop :=
-| ex_g : forall A l1 l2 l3 l4 P (pi1 : ll (l1 ++ A::l2)) (pi2 : ll (l3 ++ dual A :: l4)),
-    red2 (cut_r A _ _ _ _ (ex_r pi1 P) pi2) (ex_r (cut_r _ _ _ _ _ pi1 pi2) _).
+| tens_dg2 : forall A B C l1 l2 l3 l4 l5 (pi1 : ll (l1 ++ C :: l2)) (pi2 : ll (A::l3)) (pi3 : ll (B::l4 ++ dual C::l5)),
+    red (rew <- (app_comm_cons _ _ _) in (cut_r C _ _ (tens A B :: l4) (l5++l3) pi1 (rew <- [fun x => ll (_ :: _ ++ x)] (app_comm_cons _ _ _) in
+        (rew <- [fun x => ll (_ :: x)] (app_assoc _ _ _) in (tens_r pi2 pi3)))))
+      (rew <- [fun x => ll (_ :: _ ++ _ ++ x)] (app_assoc _ _ _) in (rew <- [fun x => ll (_ :: _ ++ x)] (app_assoc _ _ _) in 
+        (rew <- [fun x => ll (_ :: x)] (app_assoc _ _ _) in (tens_r pi2 (cut_r C l1 l2 (B :: l4) l5 pi1 pi3) : ll (tens A B :: (l4 ++ l2 ++ l1 ++ l5) ++ l3)))))
+| cut_sym2 : forall A l1 l2 l3 l4 (pi1 : ll (l1++A::l2)) (pi2 : ll (l3++dual A::l4)) (pi3 : ll (l1++l4++l3++l2)),
+    red (cut_r _ _ _ _ _ pi1 pi2) (rew <- (app_assoc _ _ _) in
+      (ex_r pi3 (Permutation_Type_trans (Permutation_Type_app_rot _ _ _) (Permutation_Type_app_rot _ _ _))))
+    -> red (cut_r _ _ _ l1 l2 pi2 (rew <- [fun x => ll (_ ++ x :: _)] (bidual _) in pi1)) pi3
 *)
-
+.
 
 
 Lemma red_size : forall l (pi1 : ll l) (pi2 : ll l), red pi1 pi2 -> psize pi2 <= psize pi1.
 Proof.
-  intros l pi1 pi2 Hr.
-  induction Hr; simpl; try lia.
-  - rewrite 2 psize_rew_r, psize_rew. simpl. lia.
-  - rewrite <- plus_n_Sm. apply le_n.
+  intros l pi1 pi2 Hr. Check red_ind.
+  induction Hr as [| | | | | | | | | | | A l1 l2 l3 l4 pi1 pi2 pi3 Hr IHr]; try (cbn; unfold app; lia).
+  - rewrite psize_rew_r, psize_rew. simpl. lia.
   - rewrite psize_rew_r. simpl. lia.
+  - rewrite 2 psize_rew_r. simpl. rewrite psize_rew_r. simpl. lia.
   - rewrite 2 psize_rew_r. simpl. rewrite psize_rew. simpl. lia.
+  - simpl. rewrite psize_rew. rewrite psize_rew_r in IHr. simpl in IHr. lia.
 Qed.
 
 Lemma red_size2 : forall l (pi1 : ll l) (pi2 : ll l), red pi1 pi2 -> psize pi2 < psize pi1.
 Proof.
   intros l pi1 pi2 Hr.
-  induction Hr; simpl; try lia.
-  - rewrite 2 psize_rew_r, psize_rew. simpl. lia.
-  - rewrite <- plus_n_Sm. admit. (*parr_d*)
+  induction Hr as [| | | | | | | | | | | A l1 l2 l3 l4 pi1 pi2 pi3 Hr IHr]; try (cbn; unfold app; lia).
+  - rewrite psize_rew_r, psize_rew. simpl. lia.
+  - simpl. admit. (*parr_d*)
   - rewrite psize_rew_r. simpl. lia.
-  - rewrite 2 psize_rew_r. simpl. rewrite psize_rew. simpl. rewrite <- plus_n_Sm, <- Plus.plus_assoc_reverse. admit. (*tens_d*)
+  - rewrite 2 psize_rew_r. simpl. rewrite psize_rew_r. simpl. admit. (*tens_dg*)
+  - rewrite 2 psize_rew_r. simpl. rewrite psize_rew. simpl. admit. (*tens_dd*)
+  - simpl. admit. (* ex_d *)
+  - simpl. rewrite psize_rew. rewrite psize_rew_r in IHr. simpl in IHr. lia.
 Abort.
 
 Fixpoint has_cut l (pi : ll l) :=
 match pi with
-| ax_r _ => false
+| ax_r _ => False
 | ex_r pi0 _ => has_cut pi0
-| tens_r pi1 pi2 => (has_cut pi1) || (has_cut pi2)
+| tens_r pi1 pi2 => (has_cut pi1) \/ (has_cut pi2)
 | parr_r pi0 => has_cut pi0
-| cut_r _ _ _ _ _ _ _ => true
+| cut_r _ _ _ _ _ _ _ => True
 end.
 
-Lemma has_cut_rew l l' (pi : ll l) (Heq : l = l') : has_cut (rew Heq in pi) = has_cut pi.
+Lemma has_cut_rew l l' (pi : ll l) (Heq : l = l') : has_cut (rew Heq in pi) <-> has_cut pi.
 Proof. now subst. Qed.
 
-Lemma has_cut_rew_r l l' (pi : ll l) (Heq : l' = l) : has_cut (rew <- Heq in pi) = has_cut pi.
+Lemma has_cut_rew_r l l' (pi : ll l) (Heq : l' = l) : has_cut (rew <- Heq in pi) <-> has_cut pi.
 Proof. now subst. Qed.
 
 
-Lemma red_term : forall l (pi1 : ll l), has_cut pi1 = true <-> exists (pi2 : ll l), red pi1 pi2.
+Lemma red_term : forall l (pi1 : ll l), has_cut pi1 <-> exists (pi2 : ll l), red pi1 pi2.
 Proof.
   intros l pi1. split.
   - induction pi1 ; intro Hcut; simpl in Hcut.
-    + apply diff_false_true in Hcut. destruct Hcut.
+    + destruct Hcut.
     + apply IHpi1 in Hcut. destruct Hcut as [pi2 Hp]. exists (ex_r pi2 p). apply ex_rec, Hp.
-    + apply orb_prop in Hcut. destruct Hcut as [Hc1 | Hc2].
+    + destruct Hcut as [Hc1 | Hc2].
       * apply IHpi1_1 in Hc1. destruct Hc1 as [pi2 Hp]. exists (tens_r pi2 pi1_2). apply tens_rec_g, Hp.
       * apply IHpi1_2 in Hc2. destruct Hc2 as [pi2 Hp]. exists (tens_r pi1_1 pi2). apply tens_rec_d, Hp.
     + apply IHpi1 in Hcut. destruct Hcut as [pi2 Hp]. exists (parr_r pi2). apply parr_rec, Hp.
     + admit.
   - intros [pi2 Hp].
     induction Hp; simpl; auto.
-    + apply has_cut_rew_r.
+    + rewrite has_cut_rew_r. now simpl.
+    + rewrite has_cut_rew_r. now simpl.
     + rewrite 2 has_cut_rew_r. now simpl.
-    + apply orb_true_intro. now left.
-    + apply orb_true_intro. now right.
 Admitted.
+
+Lemma cons_eq [T:Type] (a b:T) (x y : list T) : a :: x = b :: y -> a = b /\ x = y.
+Proof. split; injection H; auto. Qed.
+
+
+
+Lemma dichot [T:Type] (a b c:T) (x y : list T) : a :: b :: nil = x ++ c :: y -> (nil = x /\ a = c /\ b :: nil = y) \/ (a :: nil = x /\ b = c /\ nil = y).
+Proof.
+  intro H.
+  destruct x; [left|right].
+  - list_simpl in H.
+    inversion H.
+    auto.
+  - inversion H as [[H1 H2]].
+    destruct x.
+    + list_simpl in H2.
+      inversion H2.
+      auto.
+    + inversion H2 as [[H3 H4]].
+      destruct x; inversion H4.
+Qed.
 
 
 (* sous-preuve du admit ci-dessus *)
@@ -220,6 +274,60 @@ Goal forall A l1 l2 l3 l4 (pi1_1 : ll (l1 ++ A :: l2)) (pi1_2 : ll (l3 ++ dual A
   exists (pi2 : ll (l3 ++ l2 ++ l1 ++ l4)), red (cut_r A l1 l2 l3 l4 pi1_1 pi1_2) pi2.
 Proof.
   intros A l1 l2 l3 l4 pi1_1 pi1_2.
+  assert (exists l, l = l3 ++ dual A :: l4) as [l Heql] by (eexists; reflexivity).
+  remember (rew <- Heql in pi1_2) as pi eqn:Heqpi.
+  rewrite <- (rew_opp_r _ Heql pi1_2), <- Heqpi; clear Heqpi.
+  destruct pi.
+  - assert (nil = l3 /\ covar X = dual A /\ var X :: nil = l4  \/  covar X :: nil = l3 /\ var X = dual A /\ nil = l4) as [[H1 [H2 H3]] | [H1 [H2 H3]]] by (now apply dichot).
+    + subst.
+      revert Heql pi1_1.
+      assert (var X = A) as H2' by (rewrite <- bidual, <- H2; auto).
+      rewrite <- H2'.
+      intros Heql pi1_1.
+      cbn in Heql.
+      assert (HH := UIP_refl (list_dectype formulas_dectype) Heql).
+      rewrite HH.
+      cbn.
+      exists (ex_r pi1_1 (Permutation_Type_sym (Permutation_Type_app_rot l2 l1 (var X::nil)))).
+      apply ax_v.
+    + subst.
+      revert Heql pi1_1.
+      assert (covar X = A) as H2' by (rewrite <- bidual, <- H2; auto).
+      rewrite <- H2'.
+      intros Heql pi1_1.
+      cbn in Heql.
+      assert (HH := UIP_refl (list_dectype formulas_dectype) Heql).
+      rewrite HH.
+      cbn.
+      exists (rew <- (app_assoc2 _ _ _ _) in (rew (app_nil_end _) in (ex_r pi1_1 (Permutation_Type_app_rot l1 (covar X::nil) l2)))).
+      apply ax_cv.
+  - subst.
+    cbn.
+    assert ({'(l5, l6) | l0 = l5 ++ dual A :: l6}) as [(l5, l6) ->] by (apply (Permutation_Type_vs_elt_inv _ _ _ p)).
+    exists (ex_r (cut_r _ _ _ _ _ pi1_1 pi) (Permutation_Type_app_middle l2 _ _ _ _ (Permutation_Type_app_middle l1 _ _ _ _ (Permutation_Type_app_inv _ _ _ _ _ p)))).
+    apply ex_d.
+  - assert (nil = l3 /\ tens A0 B = dual A /\ l5++l0 = l4 \/ (exists l6 l7, tens A0 B :: l6 = l3 /\ l5 = l6 ++ dual A :: l7 /\ l7++l0 = l4) \/
+      (exists l6, tens A0 B :: l5 ++ l6 = l3 /\ l0 = l6 ++ dual A :: l4)) as [[H1 [H2 H3]] | [[l6 [l7 [H1 [H2 H3]]]] | [l6 [H1 H2]]]].
+    + assert (l3 ++ A^ :: l4 = (A0 ⊗ B :: nil) ++ l5 ++ l0) as Heql2 by (rewrite <- Heql; apply cons_is_app).
+      apply trichot_elt_app in Heql2.
+      destruct Heql2 as [[l2' [H1 H2]] | [[l2' [l2'' [H1 [H2 H3]]]] | [l5' [H1 H2]]]].
+      * left. apply elt_eq_unit in H1 as [H1 [H3 H4]]. rewrite H4,app_nil_l in H2. auto.
+      * right. left. exists l2', l2''. rewrite <- cons_is_app in H1. auto.
+      * right. right. exists l5'. rewrite <- cons_is_app in H1. auto.
+    + subst.
+      revert Heql pi1_1 pi1_2 pi1 pi2.
+      assert (parr (dual B) (dual A0) = A) as H2' by (rewrite <- bidual, <- H2; auto).
+      rewrite <- H2'.
+      simpl dual.
+      rewrite (bidual A0). (*
+      intros Heql pi1_1 pi1 pi2 pi1_2.
+      cbn in Heql.
+      assert (A0 ⊗ B :: l5 ++ l0 = (A0^)^ ⊗ (B^)^ :: l5 ++ l0) as H2'' by (now rewrite 2 bidual). *)
+      
+  
+  
+  
+
 Abort.
 
 
